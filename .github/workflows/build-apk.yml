@@ -7,22 +7,37 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null
+      # GitHub runner 自带 Android SDK，不再用第三方 setup-android action
+      - name: Android SDK packages
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "SDK root: $SDK"
+          ls -la "$SDK" || true
+          SM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SM" ]; then
+            SM="$(command -v sdkmanager || true)"
+          fi
+          if [ -z "$SM" ] || [ ! -x "$SM" ]; then
+            echo "::error::sdkmanager not found, dumping candidates"
+            find /usr/local/lib/android -maxdepth 6 -name sdkmanager 2>/dev/null || true
+            exit 1
+          fi
+          echo "sdkmanager: $SM"
+          yes | "$SM" --licenses > /dev/null || true
+          "$SM" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
       - name: Gradle 8.2
         run: |
